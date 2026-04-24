@@ -1,0 +1,99 @@
+---
+title: "01_exploratory_data_analysis"
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(dplyr)
+library(knitr)
+library(rmarkdown)
+
+```
+
+# Load dose response data
+```{r}
+# dose response data
+dose_response_df = read_xlsx("../data/raw/GDSC2_fitted_dose_response_27Oct23.xlsx")
+
+# expression data has 3 rows with unnecessary information, rename columns appropriately
+expression_df = read.csv("../data/raw/rnaseq_merged_20260323/rnaseq_merged_rsem_tpm_20260323.csv") %>%
+  slice(4:n()) %>%
+  rename(gene_symbol=1, ensembl_gene_id=2, depmap_id=3)
+```
+
+# Viewing data structure 
+```{r}
+expression_df[0:5, 0:5]
+```
+
+```{r}
+dose_response_df[0:5,]
+```
+
+```{r}
+str(expression_df[1:10])
+```
+```{r}
+str(dose_response_df)
+```
+
+# Check for missing values
+```{r}
+if (any(is.na(expression_df))) {
+  print("Warning: NA Values detected in expression data. Ensure you are using 
+        the correct file.")
+}
+if (any(is.na(dose_response_df))) {
+  knitr::kable(colSums(is.na(dose_response_df)))
+}
+```
+
+# Empty string values
+I could not track down the source of missingness for these values (not detected or mapped to), thus we will leave impute these with zero
+
+```{r}
+dose_response_df %>%
+  summarise(across(everything(), ~ sum(. == "", na.rm = TRUE)))
+```
+
+```{r}
+expression_df %>%
+  summarise(across(everything(), ~ sum(. == "", na.rm = TRUE)))
+```
+
+# Impute missing strings with 0 and change data type
+```{r}
+expression_df <- expression_df %>%
+  mutate(across(4:last_col(), ~ coalesce(as.numeric(na_if(., "")), 0)))
+```
+
+# Check for duplicates
+```{r}
+if (any(duplicated(dose_response_df))) {
+  cat("### Warning: Duplicate entries found in dose response data! ###\n Removing duplicate
+        entries and maintaining first occurence only...\nCompleted!")
+  dose_response_df <- dose_response_df %>% distinct()
+}
+
+duplicate_genes <- expression_df$gene_symbol[duplicated(expression_df$gene_symbol)]
+if (length(duplicate_genes) > 0) {
+  cat("### Warning: duplicate genes found ###\n") # \n adds a new line
+  cat("The following genes have multiple entries:", paste(unique(duplicate_genes), collapse = ", "))
+  cat("\nRemoving duplicate gene entries...\nCompleted!\n")
+  expression_df <- expression_df %>% distinct(gene_symbol, .keep_all = TRUE)
+}
+```
+
+# Data value ranges
+```{r}
+summary(dose_response_df$LN_IC50)
+```
+```{r}
+summary(unlist(expression_df[,4:ncol(expression_df)]))
+```
+
+```{r}
+
+```
+
